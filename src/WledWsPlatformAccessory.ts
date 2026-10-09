@@ -878,23 +878,35 @@ export class WledWsPlatformAccessory {
           this.service.addLinkedService(presetSwitchService);
         }
 
-        // create a preset object for the callback handler
-        const wledControllerPreset: WledControllerPreset = {
-          name: preset.name,
-          id: preset.id,
-          on: false,
-          hapService: presetSwitchService,
-          controller: controller,
-          isPlaylist: preset.isPlaylist,
-        };
+        // presets are received again on every (re)connect - reuse an already known preset
+        // object instead of adding a duplicate to the list
+        let wledControllerPreset = this.presetList.find(
+          (obj) => obj.id === preset.id,
+        );
+        if (wledControllerPreset === undefined) {
+          wledControllerPreset = {
+            name: preset.name,
+            id: preset.id,
+            on: false,
+            hapService: presetSwitchService,
+            controller: controller,
+            isPlaylist: preset.isPlaylist,
+          };
 
+          // store them for later usage
+          this.presetList.push(wledControllerPreset);
+        } else {
+          wledControllerPreset.name = preset.name;
+          wledControllerPreset.hapService = presetSwitchService;
+          wledControllerPreset.isPlaylist = preset.isPlaylist;
+        }
+
+        // onGet/onSet replace any previously registered handler, so calling this again is safe
+        const presetForHandler = wledControllerPreset;
         presetSwitchService
           .getCharacteristic(this.platform.Characteristic.On)
-          .onGet(() => this.getPreset(wledControllerPreset))
-          .onSet((value) => this.setPreset(wledControllerPreset, value));
-
-        // store them for later usage
-        this.presetList.push(wledControllerPreset);
+          .onGet(() => this.getPreset(presetForHandler))
+          .onSet((value) => this.setPreset(presetForHandler, value));
 
         //this.switchServices.push(presetSwitchService);
         this.platform.log.debug(
@@ -923,6 +935,17 @@ export class WledWsPlatformAccessory {
             this.accessory.removeService(cachedService);
           }
         }
+      }
+
+      // forget presets whose switch no longer exists
+      this.presetList = this.presetList.filter((obj) =>
+        existingPresets.some((preset) => preset.id === obj.id),
+      );
+      if (
+        this.activePreset !== null &&
+        !this.presetList.includes(this.activePreset)
+      ) {
+        this.activePreset = null;
       }
     }
   }
