@@ -10,6 +10,9 @@ in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
 
 ## 0. Where we stopped / how to resume (2026-10-13)
 
+Branch is pushed to the fork and up to date with `main`: the upstream fixes #468–#470 were merged
+and ported into `WledDevice` / the HomeKit accessory (124 tests, end-to-end checks unchanged).
+
 Done and committed on `feat/matter-support` (not pushed): plan, PR 1–4, README Matter section.
 Everything is verified with unit tests (114) and against a real Homebridge 2.4 Matter server with a
 fake WLED controller — but **not yet with a real WLED controller or a real Matter controller app**.
