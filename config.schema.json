@@ -57,6 +57,13 @@
         }
       },
 
+      "enableMatter": {
+        "title": "Matter",
+        "type": "boolean",
+        "default": false,
+        "description": "If enabled, the controllers are additionally exposed as Matter lights. Requires Homebridge 2 with Matter enabled for this bridge. If the bridge is also paired via HomeKit, the lights appear twice in the Home app."
+      },
+
       "logging": {
         "title": "Logging",
         "type": "boolean",
@@ -124,6 +131,7 @@
       "title": "Advanced Settings",
       "description": "Don't change these, unless you understand what you're doing.",
       "items": [
+        "enableMatter",
         "logging"
       ]
     }

@@ -2,6 +2,7 @@ import {
   API,
   DynamicPlatformPlugin,
   Logger,
+  MatterAccessory,
   PlatformAccessory,
   PlatformConfig,
   Service,
@@ -12,6 +13,7 @@ import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
 import { WledWsPlatformAccessory } from './WledWsPlatformAccessory';
 import { WledController } from './WledController';
 import { WledDevice } from './WledDevice';
+import { WledMatterAccessory } from './WledMatterAccessory';
 
 /**
  * HomebridgePlatform
@@ -25,11 +27,14 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
 
   // this is used to track restored cached accessories
   public readonly accessories: PlatformAccessory[] = [];
+  public readonly matterAccessories: MatterAccessory[] = [];
 
   // holds a list of controller
   private controllerMap = new Map();
   private accessoryMap = new Map();
   private deviceMap = new Map<string, WledDevice>();
+  private matterAccessoryMap = new Map<string, WledMatterAccessory>();
+  private claimedMatterAccessories = new Set<MatterAccessory>();
 
   constructor(
     public readonly log: Logger,
@@ -70,6 +75,21 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
 
     // add the restored accessory to the accessories cache so we can track if it has already been registered
     this.accessories.push(accessory);
+  }
+
+  /**
+   * This function is invoked when homebridge restores cached Matter accessories from disk at startup.
+   */
+  configureMatterAccessory(accessory: MatterAccessory) {
+    this.log.info('Loading Matter accessory from cache:', accessory.displayName);
+    this.matterAccessories.push(accessory);
+  }
+
+  /**
+   * Matter is used if the bridge runs Matter (Homebridge 2.x) and it is enabled in the plugin config
+   */
+  get matterEnabled(): boolean {
+    return this.config.enableMatter === true && this.api.isMatterEnabled?.() === true;
   }
 
   /**
@@ -176,6 +196,34 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
         accessoriesToBeRemoved,
       );
     }
+
+    this.removeOrphanedMatterAccessories();
+  }
+
+  /**
+   * Removes cached Matter accessories of controllers which are not configured anymore,
+   * or all of them if Matter was disabled in the plugin config
+   */
+  removeOrphanedMatterAccessories() {
+    // the cached accessory of a configured controller is passed to its WledMatterAccessory
+    const orphans = this.matterAccessories.filter(
+      (accessory) => !this.claimedMatterAccessories.has(accessory),
+    );
+    if (orphans.length === 0 || !this.api.matter) {
+      return;
+    }
+
+    for (const accessory of orphans) {
+      this.log.info('Removing Matter accessory %s', accessory.displayName);
+    }
+    this.api.matter
+      .unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, orphans)
+      .catch((error) => {
+        this.log.error(
+          'Error removing Matter accessories: %s',
+          error instanceof Error ? error.message : error,
+        );
+      });
   }
 
   /**
@@ -199,6 +247,19 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
         this.config.logging,
       ),
     );
+
+    if (this.matterEnabled) {
+      const cached = this.matterAccessories.find(
+        (accessory) => (accessory.context as { address?: string })?.address === controller.address,
+      );
+      if (cached) {
+        this.claimedMatterAccessories.add(cached);
+      }
+      this.matterAccessoryMap.set(
+        controller.address,
+        new WledMatterAccessory(this.api, this.log, device, this.config.logging, cached),
+      );
+    }
 
     // Connect the controller with Reconnect-Flag set to false
     device.connect(false);

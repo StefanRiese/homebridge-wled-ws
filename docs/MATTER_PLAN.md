@@ -1,6 +1,6 @@
 # Matter Support – Implementation Plan
 
-Status: **PR 1 + PR 2 done**, PR 3 next · Branch: `feat/matter-support` · Created: 2026-10-13
+Status: **PR 1–3 done**, PR 4 next · Branch: `feat/matter-support` · Created: 2026-10-13
 
 Goal: expose WLED controllers as Matter devices via the Homebridge 2.x Matter API (`api.matter`),
 in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
@@ -136,15 +136,32 @@ Matter handler names (Homebridge 2.4 `handlers` keys):
       RGBWCCT strips): identical WLED traffic, identical final HomeKit state, identical plugin log
       except the removed duplicate color temperature lines.
 
-### PR 3 – Matter main light (~2–3 days)
-- [ ] `src/MatterWledAccessory.ts`: registration (device type from cached capability), command
-      handlers → `WledDevice`, state push via `updateAccessoryState` with change detection.
-- [ ] Conversions + tests in `WledUtils.ts` (incl. XY→RGB).
-- [ ] Platform: `configureMatterAccessory`, orphan removal, gate on
-      `api.isMatterEnabled() && config.enableMatter`.
-- [ ] Re-register when capability differs from cached context.
-- [ ] `config.schema.json`: `enableMatter` in "Advanced Settings".
-- [ ] Matter API mock in `test/__mocks__`.
+### PR 3 – Matter main light (~2–3 days) ✅
+- [x] `src/WledMatterAccessory.ts`: device type per capability, command handlers → `WledDevice`,
+      state push via `updateAccessoryState` with change detection and rounding tolerance,
+      reachability via `bridgedDeviceBasicInformation.reachable`.
+- [x] Conversions + tests in `WledUtils.ts` (level, Matter hue/sat, RGB↔XY).
+- [x] Platform: `configureMatterAccessory`, cached accessory matched by controller address,
+      orphan removal (also all of them when `enableMatter` is switched off), gate on
+      `config.enableMatter && api.isMatterEnabled?.()` (safe on Homebridge 1.x).
+- [x] `config.schema.json`: `enableMatter` in "Advanced Settings" (default off).
+- [x] Tests with a Matter API double (`test/helpers/fakeMatter.ts`), 99 tests total.
+- [x] Verified against a real Homebridge 2.4 Matter server (fake WLED, commands via the
+      Homebridge UI IPC channel): all strip types register, restart restores the endpoint,
+      capability changes re-register, all commands reach WLED, offline commands fail cleanly.
+
+Findings from the real Matter stack (not visible with mocks):
+- Bridged (un)registrations are fire-and-forget: the API promises resolve before Homebridge
+  applied them. → Wait for registration via `getAccessoryState`; the UUID contains the light
+  capability (`matter:<address>:<lc>`) so a capability change never races an unregister.
+- With the ColorTemperature feature, Matter requires `coupleColorTempToLevelMinMireds`;
+  without it every CCT strip failed to register.
+- matter.js calls handlers internally (`stopAllColorMovement`, hue + saturation steps of
+  `moveToHueAndSaturation`). A missing handler on such a call is an unhandled error that **stops
+  Homebridge**. → All handlers of present clusters are provided; internal ones never throw;
+  identical color commands within 1 s are sent to WLED only once.
+- Color commands on a light that is off are not executed by matter.js (Matter spec, ExecuteIfOff).
+- `levelControl.move` (continuous dimming) has no WLED equivalent: accepted as no-op.
 
 ### PR 4 – Matter presets, playlists, live mode (~1–2 days)
 - [ ] One `OnOffOutlet` accessory per configured preset/playlist; add/remove on preset changes.
@@ -166,6 +183,9 @@ Matter handler names (Homebridge 2.4 `handlers` keys):
 ## 4. Open questions
 
 - Which ColorControl commands do Apple Home / Google Home send (hue/sat vs. XY)? → verify in PR 5.
+- HAP and Matter in parallel: both adapters share one `WledDevice`; verify a HomeKit change shows
+  up on the Matter side in the same run → PR 5. README: pairing both to Apple Home gives
+  duplicates; Matter-only via `bridge.hap.enabled: false` (e.g. on a child bridge).
 - ~~`ExtendedColorLight` default features – override needed?~~ **Resolved (PR 1):** Homebridge 2.4
   derives ColorControl features from the handlers we provide
   (`determineColorControlFeaturesFromHandlers`): `moveToHueAndSaturationLogic` → HueSaturation,

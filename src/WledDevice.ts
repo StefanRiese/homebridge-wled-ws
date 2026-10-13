@@ -262,7 +262,7 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
 
       this.clearHeartbeat();
       this.connectionClosed = true;
-      this.wledClient.disconnect();
+      this.wledClient?.disconnect();
     }
   }
 
