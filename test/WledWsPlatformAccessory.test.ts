@@ -180,6 +180,67 @@ describe('WledWsPlatformAccessory', () => {
     );
   });
 
+  describe('preset switches', () => {
+    const preset = (): WledControllerPreset => ({
+      id: '3',
+      name: 'Preset1',
+      on: false,
+      hapService: mockService as any,
+      controller: mockAccessory.context.device as any,
+      isPlaylist: false,
+    });
+
+    it('should activate the preset on setPreset(true)', async () => {
+      const p = preset();
+      await instance.setPreset(p, true);
+      expect(p.on).toBe(true);
+      expect(mockWledClient.setPreset).toHaveBeenCalledWith('3');
+    });
+
+    it('should turn the controller off on setPreset(false)', async () => {
+      const p = preset();
+      p.on = true;
+      await instance.setPreset(p, false);
+      expect(p.on).toBe(false);
+      expect(mockWledClient.turnOff).toHaveBeenCalled();
+    });
+
+    it('should reject setPreset if controller is not connected', async () => {
+      instance['connectionEstablished'] = false;
+      await expect(instance.setPreset(preset(), true)).rejects.toThrow(Error);
+      expect(mockWledClient.setPreset).not.toHaveBeenCalled();
+    });
+
+    it('should return the preset state on getPreset', async () => {
+      const p = preset();
+      p.on = true;
+      await expect(instance.getPreset(p)).resolves.toBe(true);
+    });
+
+    it('should register onGet/onSet handlers for configured presets', () => {
+      mockWledClient.presets = {
+        '3': { name: 'Preset1', segments: [] },
+        '4': { name: 'Other', segments: [] },
+      };
+      instance.onPresetsReceived();
+
+      expect(mockAccessory.addService).toHaveBeenCalledWith(
+        mockPlatform.Service.Switch,
+        'Preset1',
+        'WLED-PRESET-3',
+      );
+      expect(mockAccessory.addService).not.toHaveBeenCalledWith(
+        mockPlatform.Service.Switch,
+        'Other',
+        'WLED-PRESET-4',
+      );
+      expect(instance['presetList'].map((p) => p.id)).toEqual(['3']);
+      expect(mockService.onGet).toHaveBeenCalled();
+      expect(mockService.onSet).toHaveBeenCalled();
+      mockWledClient.presets = {};
+    });
+  });
+
   it('should update ledState and log info when onStateReceived is called', () => {
     // Vorbereiten: z.B. LED-Status im Mock setzen
     mockWledClient.state.on = true;

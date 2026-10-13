@@ -1,5 +1,11 @@
 # Ignore source code
 src
+test
+docs
+scripts
+eslint.config.mjs
+jest.config.mjs
+tsconfig.test.json
 
 # ------------- Defaults ------------- #
 

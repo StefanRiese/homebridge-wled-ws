@@ -1,6 +1,6 @@
 # Matter Support – Implementation Plan
 
-Status: **planned** · Branch: `feat/matter-support` · Created: 2026-10-13
+Status: **PR 1 done**, PR 2 next · Branch: `feat/matter-support` · Created: 2026-10-13
 
 Goal: expose WLED controllers as Matter devices via the Homebridge 2.x Matter API (`api.matter`),
 in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
@@ -91,23 +91,31 @@ Design decisions:
 | Color temp  | CCT 0–255     | mired     | `colorTemperatureMireds`   |
 | XY color    | RGB           | –         | `currentX/currentY` 0–65279 |
 
-Matter commands to handle:
-`onOff.on/off/toggle`, `levelControl.moveToLevel/moveToLevelWithOnOff`,
-`colorControl.moveToHueAndSaturation/moveToHue/moveToSaturation/moveToColor/moveToColorTemperature`.
+Matter handler names (Homebridge 2.4 `handlers` keys):
+- `onOff`: `on`, `off`, `toggle`
+- `levelControl`: `moveToLevel`, `moveToLevelWithOnOff`, `move`, `step`, `stop`
+- `colorControl`: `moveToHueAndSaturationLogic`, `moveToHueLogic`, `moveToSaturationLogic`,
+  `moveToColorLogic` (XY), `moveToColorTemperatureLogic`, `stopAllColorMovement`
 
 ---
 
 ## 3. Implementation steps (one PR each)
 
-### PR 1 – Tooling & compatibility (~½ day)
-- [ ] devDependency `homebridge` 1.7 → `^2.4.0` (for `api.matter` types); verify build still works and
-      plugin still runs on Homebridge 1.8.
-- [ ] Fix `engines.homebridge` → `"^1.8.0 || ^2.0.0"`.
-- [ ] Migrate preset switches from `.on('get'/'set')` to `onGet`/`onSet`.
-- [ ] Re-enable `npm test` in `.github/workflows/release_package.yml`.
-- [ ] Add `"prepare": "npm run build"` (enables install from git branch).
-- [ ] Add `scripts/deploy-local.sh` (see §5).
-- [ ] Confirm the default ColorControl features of `ExtendedColorLight` in the installed types.
+### PR 1 – Tooling & compatibility (~½ day) ✅
+- [x] devDependency `homebridge` 1.7 → `^2.4.0` (for `api.matter` types). Needed `skipLibCheck`
+      in `tsconfig.json` (matter.js typings need newer libs). `target` deliberately kept at ES2018:
+      ES2022 class-field semantics would break `Service = this.api.hap.Service` in the platform.
+- [x] Fix `engines.homebridge` → `"^1.8.0 || ^2.0.0"`.
+- [x] Migrate preset switches from `.on('get'/'set')` to `onGet`/`onSet`. Also fixes an unhandled
+      promise rejection: async `setPreset` threw `HapStatusError` inside a callback-style handler.
+      Tests added.
+- [x] Re-enable `npm test` in `.github/workflows/release_package.yml`.
+- [x] Add `"prepare": "npm run build"` (enables install from git branch).
+- [x] Add `scripts/deploy-local.sh` (see §5).
+- [x] Default ColorControl features of `ExtendedColorLight`: **no override needed** (see §4).
+- [x] `.npmignore`: exclude `test/`, `docs/`, `scripts/` and dev configs from the npm package.
+- [ ] Not done (separate fix): `npm run lint` only lints `eslint.config.mjs`. `eslint src` is clean,
+      `test/` has 23 pre-existing `no-explicit-any` errors.
 
 ### PR 2 – Extract `WledDevice`, no behavior change (~2–3 days)
 - [ ] Move connection, reconnect, heartbeat, state, presets, commands into `src/WledDevice.ts`
@@ -146,7 +154,12 @@ Matter commands to handle:
 ## 4. Open questions
 
 - Which ColorControl commands do Apple Home / Google Home send (hue/sat vs. XY)? → verify in PR 5.
-- `ExtendedColorLight` default features for RGB strips without CCT – override needed? → PR 1.
+- ~~`ExtendedColorLight` default features – override needed?~~ **Resolved (PR 1):** Homebridge 2.4
+  derives ColorControl features from the handlers we provide
+  (`determineColorControlFeaturesFromHandlers`): `moveToHueAndSaturationLogic` → HueSaturation,
+  `moveToColorLogic` → Xy, `moveToColorTemperatureLogic` → ColorTemperature. On cache restore it
+  falls back to the cluster attributes. So: only pass the handlers the strip supports.
+- Homebridge 2.x itself requires Node `^22 || ^24 || ^26`; Node 20 users are HB 1.x / HAP-only.
 - Keep Node 20 in CI? Proposal: yes (HAP-only there; Matter requires Node ≥ 22.12).
 
 ---
@@ -214,22 +227,15 @@ sudo -u homebridge npm install --prefix /var/lib/homebridge StefanRiese/homebrid
 sudo hb-service restart
 ```
 
-### Planned helper: `scripts/deploy-local.sh` (PR 1)
+### Helper: `scripts/deploy-local.sh`
 
 ```bash
-#!/usr/bin/env bash
-# Usage: HB_HOST=<host> HB_USER=<user> scripts/deploy-local.sh
-set -euo pipefail
-: "${HB_HOST:?set HB_HOST}"; : "${HB_USER:?set HB_USER}"
-HB_PREFIX="${HB_PREFIX:-/var/lib/homebridge}"
-
-npm run build
-TGZ=$(npm pack --silent | tail -1)
-scp "$TGZ" "$HB_USER@$HB_HOST:/tmp/$TGZ"
-ssh -t "$HB_USER@$HB_HOST" \
-  "sudo -u homebridge npm install --prefix '$HB_PREFIX' '/tmp/$TGZ' && sudo hb-service restart && rm '/tmp/$TGZ'"
-rm "$TGZ"
+npm version 0.1.0-matter.1 --no-git-tag-version
+HB_HOST=<HOMEBRIDGE_HOST> HB_USER=root scripts/deploy-local.sh   # HB_USER defaults to root
 ```
+Builds (via `npm pack` → `prepare`), copies the tarball, installs it as the `homebridge` user
+(`runuser` when logged in as root, `sudo` otherwise), using `/opt/homebridge/bin/npm` if present,
+then runs `hb-service restart`. `HB_PREFIX` overrides `/var/lib/homebridge`.
 
 ---
 

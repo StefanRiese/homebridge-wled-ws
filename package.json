@@ -24,7 +24,7 @@
   },
   "engines": {
     "node": "^20.19.0 || ^22.14.0 || ^24.0.0",
-    "homebridge": "^1.8.0|| ^2.0.0-beta.0"
+    "homebridge": "^1.8.0 || ^2.0.0"
   },
   "main": "dist/index.js",
   "scripts": {
@@ -32,6 +32,7 @@
     "lint:fix": "eslint eslint.config.mjs --fix --max-warnings=0",
     "watch": "npm run build && npm link && nodemon",
     "build": "rimraf ./dist && tsc",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm run build",
     "test": "jest --detectOpenHandles"
   },
@@ -46,7 +47,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.2",
     "eslint": "^10.0.2",
-    "homebridge": "^1.7.0",
+    "homebridge": "^2.4.0",
     "jest": "^30.3.0",
     "nodemon": "^3.0.3",
     "rimraf": "^6.0.1",
