@@ -64,6 +64,25 @@
         "description": "If enabled, the controllers are additionally exposed as Matter lights. Requires Homebridge 2 with Matter enabled for this bridge. If the bridge is also paired via HomeKit, the lights appear twice in the Home app."
       },
 
+      "testController": {
+        "title": "Test controller",
+        "type": "boolean",
+        "default": false,
+        "description": "If enabled, a simulated WLED controller \"WLED Test\" with the presets \"Test Red\" and \"Test Blue\" is added (on/off, brightness, color). Use it to test the connection to HomeKit / Matter without hardware. Its state is reset when Homebridge restarts."
+      },
+
+      "testControllerPort": {
+        "title": "Test controller port",
+        "type": "integer",
+        "default": 18099,
+        "minimum": 1024,
+        "maximum": 65535,
+        "description": "Local port (127.0.0.1) of the simulated controller. Change it only if the port is in use.",
+        "condition": {
+          "functionBody": "return model.testController === true;"
+        }
+      },
+
       "logging": {
         "title": "Logging",
         "type": "boolean",
@@ -132,6 +151,8 @@
       "description": "Don't change these, unless you understand what you're doing.",
       "items": [
         "enableMatter",
+        "testController",
+        "testControllerPort",
         "logging"
       ]
     }

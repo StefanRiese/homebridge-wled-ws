@@ -65,6 +65,8 @@ Using Homebridge's integrated JSON Editor requires the following configuration e
 | showRealTimeModeButton | True or False | If enabled (=True) a switch will be created in Homekit to enable/disable real-time mode. This is useful if you sometimes want to disable the real time mode.                           |
 | resetRealTimeModeAfterStream | True or False | If disabled (=True) the showRealTimeModeButton Switch controls the state of the realtime mode. If enabled realtime mode always turns back on, after finising a real time mode session. |
 | enableMatter | True or False | If enabled (=True) the controllers are additionally exposed as Matter lights. Requires Homebridge 2 with Matter enabled for the bridge, see [Matter](#matter-homebridge-2-beta). Default: False |
+| testController | True or False | If enabled (=True) a simulated controller "WLED Test" is added, see [Test controller](#test-controller). Default: False |
+| testControllerPort | Port number | Local port of the test controller. Default: 18099 |
 
 
 > [!IMPORTANT] 
@@ -237,6 +239,30 @@ Matter cannot change the structure of a device while it is published. If the lis
 2. Color changes sent to a light which is turned off are not applied - this is the behavior defined by Matter. Turn the light on first.
 3. Continuous dimming (e.g. holding a button of a Matter dimmer switch) is not supported, step and absolute brightness changes are.
 4. Color temperature uses the white channel and WLED's CCT value (140-500 mired), same as HomeKit.
+
+## Test controller
+
+For testing the connection between Homebridge and HomeKit / Matter without WLED hardware, the plugin can add a simulated controller. Enable `testController` in the plugin settings (Advanced Settings) and restart the bridge:
+
+```
+{
+    "platform": "wled-ws",
+    "name": "wled-ws platform",
+    "controllers": [ ... ],
+    "testController": true,
+    "logging": true
+}
+```
+
+The test controller is added like a configured controller:
+
+- Name "WLED Test", an RGB light with on/off, brightness and color.
+- Two presets, "Test Red" (red, 50 % brightness) and "Test Blue" (blue, full brightness), exposed as switches (HomeKit) or parts (Matter) like the presets of a real controller.
+- It runs inside the plugin and listens on `127.0.0.1:18099` only (change it with `testControllerPort` if the port is in use). The plugin connects to it via WebSocket like to a real controller, so the whole path is tested.
+- With `logging` enabled, every command it receives is logged (`Test controller WLED Test received via WebSocket: ...`), together with the plugin's log lines this shows when a change from HomeKit / Matter arrived and when the new state was sent back.
+- Its state is not saved, after a restart it is off.
+
+Disable `testController` again to remove the accessory.
 
 ## Why using websockets instead of MQTT or HTTP?
 

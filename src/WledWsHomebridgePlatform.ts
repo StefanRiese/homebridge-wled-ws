@@ -14,6 +14,7 @@ import { WledWsPlatformAccessory } from './WledWsPlatformAccessory';
 import { WledController } from './WledController';
 import { WledDevice } from './WledDevice';
 import { WledMatterAccessory } from './WledMatterAccessory';
+import { SIMULATOR_DEFAULT_PORT, SIMULATOR_NAME, SIMULATOR_PRESETS, WledSimulator } from './WledSimulator';
 
 /**
  * HomebridgePlatform
@@ -35,6 +36,7 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
   private deviceMap = new Map<string, WledDevice>();
   private matterAccessoryMap = new Map<string, WledMatterAccessory>();
   private claimedMatterAccessories = new Set<MatterAccessory>();
+  private simulator?: WledSimulator;
 
   constructor(
     public readonly log: Logger,
@@ -43,7 +45,7 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
   ) {
     // Check if at least one controller is configured using plugin settings or config.json
     // For the "homebridge verified" badge we must not continue if the configuration is missing
-    if (!this.config.controllers) {
+    if (!this.config.controllers && !this.config.testController) {
       log.error('Please configure at least one controller');
       return;
     }
@@ -57,13 +59,57 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
     this.api.on('didFinishLaunching', () => {
       log.debug('Executed didFinishLaunching callback');
       // run the method to discover / register your devices as accessories
-      this.discoverDevices();
+      if (this.config.testController === true) {
+        // the simulated controller has to listen before it is connected
+        this.startTestController().finally(() => this.discoverDevices());
+      } else {
+        this.discoverDevices();
+      }
     });
 
     this.api.on('shutdown', () => {
       log.debug('Executed shutdown callback');
       this.disconnectDevices();
+      this.simulator?.stop();
     });
+  }
+
+  /**
+   * Starts the simulated WLED controller if it is enabled in the plugin config
+   */
+  async startTestController() {
+    if (this.config.testController !== true) {
+      return;
+    }
+    const port = Number(this.config.testControllerPort) || SIMULATOR_DEFAULT_PORT;
+    const simulator = new WledSimulator(this.log, port, this.config.logging === true);
+    try {
+      await simulator.start();
+      this.simulator = simulator;
+    } catch (error) {
+      this.log.error(
+        'Test controller could not be started on port %s: %s',
+        port,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /**
+   * The controllers from the plugin config, plus the test controller if it is running
+   */
+  configuredControllers(): WledController[] {
+    const controllers = Object.values((this.config.controllers ?? {}) as Record<string, WledController>);
+    if (this.simulator) {
+      controllers.push({
+        name: SIMULATOR_NAME,
+        address: this.simulator.address,
+        presets: Object.values(SIMULATOR_PRESETS).map((preset) => preset.n).join(','),
+        showRealTimeModeButton: false,
+        resetRealTimeModeAfterStream: false,
+      });
+    }
+    return controllers;
   }
 
   /**
@@ -103,8 +149,7 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
     // Configured, but not cached -> Add
     // Configured and cached -> Restore
     // Not configured, but cached -> Remove
-    for (const id in this.config.controllers) {
-      const controller = <WledController>this.config.controllers[id];
+    for (const controller of this.configuredControllers()) {
       this.log.info(
         'Loading configuration for controller %s at address %s',
         controller.name,
