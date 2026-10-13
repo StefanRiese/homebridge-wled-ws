@@ -48,8 +48,10 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
   private connectionEstablished = false;
   private reconnectIntervalId: Timeout | null = null;
   private heartbeatIntervalId: Timeout | null = null;
+  private pongTimeoutId: Timeout | null = null;
   private reconnectIntervalMillis = 10000;
   private heartbeatIntervalMillis = 30000;
+  private pongTimeoutMillis = 10000;
   private heartbeatSupported = true;
   private init = false;
 
@@ -244,6 +246,17 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
         controller.name,
         controller.address,
       );
+    }
+
+    // WLEDClient only reports an error if both HTTP and websocket failed. If just the websocket
+    // could not be opened, no event is emitted at all - make sure a reconnect is scheduled anyway
+    if (isCurrent() && !this.connectionEstablished && !this.connectionClosed) {
+      this.log.error(
+        'Websocket connection to controller %s at address %s could not be established',
+        controller.name,
+        controller.address,
+      );
+      this.scheduleReconnect();
     }
     return true;
   }
@@ -554,6 +567,17 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
   onConnected() {
     this.log.info('Controller %s connected', this.controller.name);
     this.connectionEstablished = true;
+
+    // the websocket is replaced on every reconnect, so the pong listener is registered per connection
+    const websocket = this.wledClient.WSAPI?.websocket;
+    if (websocket && typeof websocket.on === 'function') {
+      websocket.on('pong', () => {
+        if (websocket === this.wledClient.WSAPI?.websocket) {
+          this.resetHeartbeatInterval();
+        }
+      });
+    }
+
     this.resetHeartbeatInterval();
     this.emit('connected');
   }
@@ -580,7 +604,10 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
   }
 
   /**
-   * Send a websocket ping and reconnect if the underlying websocket rejects it.
+   * Send a websocket ping and reconnect if the underlying websocket rejects it or
+   * no answer (pong or any other data) is received within pongTimeoutMillis.
+   * A ping on a dead connection usually does not fail, so the missing answer is
+   * the only reliable indication for a lost connection.
    */
   sendHeartbeatPing() {
     if (
@@ -609,38 +636,52 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
 
     try {
       ping.call(websocket);
-      this.resetHeartbeatInterval();
     } catch (error) {
-      this.log.info(
-        'Controller %s websocket heartbeat ping failed; reconnecting: %s',
-        controller.name,
-        error instanceof Error ? error.message : error,
+      this.onHeartbeatFailed(
+        `ping failed: ${error instanceof Error ? error.message : error}`,
       );
-
-      this.connectionEstablished = false;
-      this.clearHeartbeat();
-
-      try {
-        this.wledClient.disconnect();
-      } catch (disconnectError) {
-        this.log.error(
-          'Error disconnecting stale websocket for controller %s: %s',
-          controller.name,
-          disconnectError instanceof Error ? disconnectError.message : disconnectError,
-        );
-      }
-
-      this.onDisconnected();
+      return;
     }
+
+    // cleared by resetHeartbeatInterval() as soon as a pong or any other data arrives
+    this.pongTimeoutId = setTimeout(() => {
+      this.pongTimeoutId = null;
+      this.onHeartbeatFailed(
+        `no answer within ${this.pongTimeoutMillis / 1000} seconds`,
+      );
+    }, this.pongTimeoutMillis);
   }
 
   /**
-   * Clear the active websocket heartbeat interval.
+   * The heartbeat detected a dead connection: drop the websocket and reconnect
+   */
+  onHeartbeatFailed(reason: string) {
+    this.log.info(
+      'Controller %s websocket heartbeat %s; reconnecting',
+      this.controller.name,
+      reason,
+    );
+
+    this.connectionEstablished = false;
+    this.clearHeartbeat();
+
+    // the socket is replaced in connect(); events of the old client are ignored from then on
+    this.terminateWebsocket();
+    this.onDisconnected();
+  }
+
+  /**
+   * Clear the active websocket heartbeat interval and a pending pong timeout.
    */
   clearHeartbeat() {
     if (this.heartbeatIntervalId !== null) {
       clearTimeout(this.heartbeatIntervalId);
       this.heartbeatIntervalId = null;
+    }
+
+    if (this.pongTimeoutId !== null) {
+      clearTimeout(this.pongTimeoutId);
+      this.pongTimeoutId = null;
     }
   }
 
@@ -672,9 +713,9 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
   }
 
   /**
-   * Schedule a reconnect unless the connection was closed on purpose
+   * (Re)starts the reconnect timer unless the connection was closed on purpose
    */
-  private scheduleReconnect() {
+  scheduleReconnect() {
     if (this.reconnectIntervalId !== null) {
       clearTimeout(this.reconnectIntervalId);
       this.reconnectIntervalId = null;
@@ -682,6 +723,7 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
 
     if (!this.connectionClosed) {
       this.reconnectIntervalId = setTimeout(() => {
+        this.reconnectIntervalId = null;
         if (!this.connectionEstablished) {
           this.connect(true);
         }

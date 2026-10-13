@@ -33,6 +33,7 @@ function createApi(withMatter: boolean) {
         getService: jest.fn().mockReturnValue(service),
         addService: jest.fn().mockReturnValue(service),
         getServiceById: jest.fn(),
+        services: [],
         removeService: jest.fn(),
       };
     }),

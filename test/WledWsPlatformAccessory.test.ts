@@ -23,6 +23,7 @@ const mockAccessory =  {
   getService: jest.fn().mockReturnValue(mockService),
   addService: jest.fn().mockReturnValue(mockService),
   getServiceById: jest.fn().mockReturnValue(undefined),
+  services: [],
   removeService: jest.fn(),
   context: {
     device: {
@@ -129,6 +130,11 @@ describe('WledWsPlatformAccessory', () => {
     await device.connect(false);
     device['wledClient'] = mockWledClient;
     device['connectionEstablished'] = true;
+  });
+
+  afterEach(() => {
+    // stops the reconnect timer scheduled for the never opened mock connection
+    device.disconnect();
   });
 
   it('should instantiate without errors', () => {
