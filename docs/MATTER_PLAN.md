@@ -1,12 +1,31 @@
 # Matter Support – Implementation Plan
 
-Status: **PR 1–4 done**, PR 5 (real devices, docs, release) next · Branch: `feat/matter-support` · Created: 2026-10-13
+Status: **PR 1–4 done, README written** — paused, PR 5 (real devices) next · Branch: `feat/matter-support` · Created: 2026-10-13
 
 Goal: expose WLED controllers as Matter devices via the Homebridge 2.x Matter API (`api.matter`),
 in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
 `StefanRiese/homebridge-wled-ws` (upstream: `smhex/homebridge-wled-ws`).
 
 ---
+
+## 0. Where we stopped / how to resume (2026-10-13)
+
+Done and committed on `feat/matter-support` (not pushed): plan, PR 1–4, README Matter section.
+Everything is verified with unit tests (114) and against a real Homebridge 2.4 Matter server with a
+fake WLED controller — but **not yet with a real WLED controller or a real Matter controller app**.
+
+Next steps, in order:
+1. Deploy to the Homebridge LXC container (§5): fill in host/user, check IPv6 in the container,
+   `npm version 0.1.0-matter.1 --no-git-tag-version && HB_HOST=<host> scripts/deploy-local.sh`.
+2. Enable Matter for the bridge (`bridge.matter`) and `enableMatter` in the plugin config.
+3. Pair with Apple Home and/or Google Home and work through the PR 5 checklist below.
+4. Fix what comes up, then CHANGELOG + release decision (§6).
+
+Test harness used so far (lives in the session scratchpad, **not in the repo** — rebuild if needed):
+`fake-wled.js` (HTTP + websocket WLED double, `LC=<capability>`), `scenario.sh` (scripted HomeKit
+run with baseline diff), `run-matter.sh` and `matter-commands.js` (real Homebridge 2.4 Matter
+server, commands via the `matterAccessoryControl` IPC message the Homebridge UI uses).
+Consider adding a cleaned-up version under `test/e2e/` in PR 5.
 
 ## 1. Background
 
@@ -181,12 +200,23 @@ Findings from the real Matter stack (not visible with mocks):
       restart reattaches, removing/re-adding a preset keeps all endpoint numbers, strip type change
       rebuilds the color features, part commands reach WLED. 114 unit tests.
 
-### PR 5 – Real-device testing, docs, release (~2–3 days)
-- [ ] Test on local Homebridge (§5) with Apple Home + Google Home (Alexa if available).
-- [ ] Matrix: each strip type available, WLED reboot, Homebridge restart (cache restore), preset
-      list change, controller removed from config.
-- [ ] Log which color commands each controller actually sends.
-- [ ] README: Matter section (enabling, duplicates warning, supported features), CHANGELOG.
+### PR 5 – Real-device testing, docs, release (~2–3 days) — in progress
+- [x] README: Matter section (requirements incl. IPv6/LXC, exposed device types, presets as
+      parts, HomeKit + Matter together, structure changes, limitations); `enableMatter` in the
+      settings table and config example.
+- [ ] Deploy to the local Homebridge (§5); confirm HomeKit still works with the real controllers.
+- [ ] Pair with Apple Home + Google Home (Alexa if available). Check per app:
+  - [ ] light + preset/playlist/live parts: how are they presented?
+  - [ ] on/off, brightness, color, color temperature work; which color commands are sent
+        (enable `logging`, look for `Matter: set controller ...` lines: hue/saturation vs. xy)
+  - [ ] preset/playlist/live parts work, exclusive preset, playlist resets
+  - [ ] state changes from the WLED app show up in the Matter app
+- [ ] HomeKit and Matter in parallel: a HomeKit change shows up in the Matter app and vice versa.
+- [ ] Structure change (remove a preset from the config, restart): does the app keep the light's
+      room and automations? (same UUID, endpoint numbers are kept — verified)
+- [ ] Matrix: each strip type available, WLED reboot (reachability), Homebridge restart (cache
+      restore), controller removed from config, `enableMatter` switched off (accessory removed).
+- [ ] Update README with the results (tested controllers, presentation of parts), CHANGELOG.
 - [ ] Release `0.1.0` beta (see §6).
 
 **Total estimate: ~1.5–2 weeks.**

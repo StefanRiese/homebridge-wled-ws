@@ -25,6 +25,8 @@ This is a Homebridge dynamic platform plugin for controlling LED strips connecte
 
 The plugin adds a Lightbulb to Homekit for every configured WLED controller. The Lightbulb can be switched on and off and it's dimmable. Depending on the LED configuration additional services will be made available (e.g. color selection). For each configured preset a switch is created that can be used in for  automation. Unlike other plugins the preset selection is not implemented as a Homekit Television service.
 
+On Homebridge 2 the controllers can additionally be exposed via [Matter](#matter-homebridge-2-beta), e.g. to use them with Google Home or Amazon Alexa.
+
 ## Connection recovery
 
 The plugin manages WebSocket reconnection itself. After 30 seconds without incoming WLED updates, it sends a WebSocket heartbeat. If sending that heartbeat fails, the plugin reconnects automatically. No additional configuration is required.
@@ -48,6 +50,7 @@ Using Homebridge's integrated JSON Editor requires the following configuration e
             "resetRealTimeModeAfterStream": true
         }
     ],
+    "enableMatter": false,
     "logging": false
 }
 ```
@@ -61,10 +64,79 @@ Using Homebridge's integrated JSON Editor requires the following configuration e
 | logging    | True or False               | If enabled (=True) WLED's JSON data will be logged. Leave it disabled if everything works as expected. If you want to file an issue on Github turn it on for later analysis            |
 | showRealTimeModeButton | True or False | If enabled (=True) a switch will be created in Homekit to enable/disable real-time mode. This is useful if you sometimes want to disable the real time mode.                           |
 | resetRealTimeModeAfterStream | True or False | If disabled (=True) the showRealTimeModeButton Switch controls the state of the realtime mode. If enabled realtime mode always turns back on, after finising a real time mode session. |
+| enableMatter | True or False | If enabled (=True) the controllers are additionally exposed as Matter lights. Requires Homebridge 2 with Matter enabled for the bridge, see [Matter](#matter-homebridge-2-beta). Default: False |
 
 
 > [!IMPORTANT] 
 > WLED organizes presets by id. This plugin uses names for configuration. When starting, it checks whether the name exists. If not, an error message is generated. In such a case please check the preset name for typos.
+
+## Matter (Homebridge 2, beta)
+
+Besides HomeKit, the plugin can expose every WLED controller as a Matter device. This makes the controllers available to Matter controllers like Google Home, Amazon Alexa or SmartThings - via the Homebridge Matter bridge, WLED itself does not need Matter support.
+
+> [!NOTE]
+> Matter support is new and has not been tested with all Matter controllers yet. Please report issues on Github (with `logging` enabled).
+
+### Requirements
+
+- Homebridge 2 (tested with 2.4) with Matter enabled for the bridge the plugin runs on (main bridge or child bridge). Homebridge 2 requires Node.js 22 or newer.
+- `enableMatter` enabled in the plugin settings.
+- IPv6 and mDNS (multicast) in your network, Matter depends on both. If Homebridge runs in a container (e.g. an LXC container on Proxmox or Docker), make sure the container has an IPv6 address (`ip -6 addr` shows an `fe80::` address) and uses a bridged network, not NAT.
+
+For the main bridge Matter is enabled with a `matter` block in the `bridge` section of the Homebridge `config.json` (or the Homebridge UI):
+
+```
+"bridge": {
+    "name": "Homebridge",
+    ...
+    "matter": {
+        "port": 5541
+    }
+}
+```
+
+After a restart, Homebridge logs a Matter pairing code and QR code (also shown in the Homebridge UI), which you use to add the bridge in your Matter controller app.
+
+### What is exposed
+
+Each WLED controller becomes **one** Matter light. Its device type follows the LED configuration reported by WLED:
+
+| WLED light capability | Matter device type | Controls |
+| :-- | :-- | :-- |
+| On/Off only | On/Off Light | on/off |
+| White | Dimmable Light | on/off, brightness |
+| White with CCT | Color Temperature Light | on/off, brightness, color temperature |
+| RGB, RGBW | Extended Color Light | on/off, brightness, color |
+| RGBW with CCT | Extended Color Light | on/off, brightness, color, color temperature |
+
+The configured presets and playlists, and the real-time mode switch (if `showRealTimeModeButton` is enabled), are on/off parts of this light. They behave like the HomeKit switches:
+
+- Turning a preset on activates it, the previously active preset is turned off.
+- Turning the active preset off turns the light off.
+- A playlist turns itself off again right after it was started.
+- The real-time mode part is named "Ambilight", like the HomeKit switch.
+
+How the parts are presented depends on the controller app - some show them as separate devices.
+
+If the controller is not reachable, the Matter light is reported as unreachable and commands fail.
+
+### Using HomeKit and Matter together
+
+HomeKit and Matter can be used at the same time - both control the same WLED connection and stay in sync. However, if you add the Homebridge HomeKit bridge **and** the Homebridge Matter bridge to the Apple Home app, every light shows up twice. Typical setups:
+
+- HomeKit for Apple Home, Matter for Google Home / Alexa.
+- Matter only: disable HomeKit for the bridge (`"hap": { "enabled": false }` in the `bridge` section). To keep other plugins on HomeKit, run this plugin as a child bridge and disable HomeKit only there.
+
+### Changes of presets or LED configuration
+
+Matter cannot change the structure of a device while it is published. If the list of presets, the real-time mode switch or the LED configuration (e.g. RGB to RGBW with CCT) changes, the plugin removes the Matter device and adds it again. It keeps the same device id, and the light and unchanged presets keep their Matter endpoint numbers - depending on the controller app, room assignments and automations may still need to be checked afterwards.
+
+### Matter limitations
+
+1. Like HomeKit, only the first (main) segment is controlled.
+2. Color changes sent to a light which is turned off are not applied - this is the behavior defined by Matter. Turn the light on first.
+3. Continuous dimming (e.g. holding a button of a Matter dimmer switch) is not supported, step and absolute brightness changes are.
+4. Color temperature uses the white channel and WLED's CCT value (140-500 mired), same as HomeKit.
 
 ## Why using websockets instead of MQTT or HTTP?
 
