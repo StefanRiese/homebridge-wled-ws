@@ -63,6 +63,26 @@ describe('WledWsPlatformAccessory preset switches', () => {
 
     await expect(handler()).resolves.toBe(false);
   });
+
+  it('does not duplicate presets when they are received again after a reconnect', async () => {
+    clients[0].emit('update:presets');
+    clients[0].emit('update:presets');
+
+    expect(device.presets).toHaveLength(2);
+
+    const calls = accessory.presetServices['WLED-PRESET-1'].characteristic.onSet.mock.calls;
+    const handler = calls[calls.length - 1][0];
+    await handler(true);
+    expect(clients[0].setPreset).toHaveBeenCalledTimes(1);
+  });
+
+  it('forgets presets that are no longer configured', () => {
+    clients[0].emit('update:presets');
+    accessory.context.device.presets = 'Preset1';
+    clients[0].emit('update:presets');
+
+    expect(device.presets.map((preset) => preset.name)).toEqual(['Preset1']);
+  });
 });
 
 describe('WledWsPlatformAccessory cached preset switches', () => {
