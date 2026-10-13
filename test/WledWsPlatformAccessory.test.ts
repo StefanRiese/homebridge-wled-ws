@@ -1,7 +1,8 @@
 jest.mock('wled-client');
 
 import { WledWsPlatformAccessory } from '../src/WledWsPlatformAccessory';
-import { LightCapability, WledControllerPreset } from '../src/WledController';
+import { WledDevice } from '../src/WledDevice';
+import { LightCapability, WledPreset } from '../src/WledController';
 
 // Mock-Objekte für Abhängigkeiten
 const mockLogger = { info: jest.fn(), error: jest.fn(), debug: jest.fn() };
@@ -62,6 +63,7 @@ const mockPlatform = {
     FirmwareRevision: 'FirmwareRevision',
     SerialNumber: 'SerialNumber',
     ConfiguredName: 'ConfiguredName',
+    ColorTemperature: 'ColorTemperature',
   },
   log: mockLogger, 
   api: {
@@ -79,6 +81,7 @@ const mockWledClient = {
   ignoreLiveData: jest.fn(),
   setBrightness: jest.fn(),
   setColor: jest.fn(),
+  setCCT: jest.fn(),
   setPreset: jest.fn(),
   disconnect: jest.fn(),
   refreshPresets: jest.fn(),
@@ -106,6 +109,7 @@ const mockWledClient = {
 };
 
 let instance: WledWsPlatformAccessory;
+let device: WledDevice;
 
 describe('WledWsPlatformAccessory', () => {
   beforeEach(async () => {
@@ -114,16 +118,17 @@ describe('WledWsPlatformAccessory', () => {
     if (mockAccessory.context && mockAccessory.context.device) {
       mockAccessory.context.device.resetRealTimeModeAfterStream = false;
     }
+    device = new WledDevice(mockAccessory.context.device as any, mockLogger as any, true);
     instance = new WledWsPlatformAccessory(
       mockPlatform as any,
       mockLogger as any,
       mockAccessory as any,
+      device,
       true
     );
-    instance['connectionEstablished'] = true;
-    await instance.connect(false); 
-    instance['wledClient'] = mockWledClient;
-    instance['connectionEstablished'] = true;
+    await device.connect(false);
+    device['wledClient'] = mockWledClient;
+    device['connectionEstablished'] = true;
   });
 
   it('should instantiate without errors', () => {
@@ -139,7 +144,7 @@ describe('WledWsPlatformAccessory', () => {
   });
 
   it('should throw error if controller is not connected on setOn', async () => {
-    instance['connectionEstablished'] = false;
+    device['connectionEstablished'] = false;
     await expect(instance.setOn(true)).rejects.toThrow(Error);
     expect(mockLogger.error).toHaveBeenCalled();
   });
@@ -181,12 +186,10 @@ describe('WledWsPlatformAccessory', () => {
   });
 
   describe('preset switches', () => {
-    const preset = (): WledControllerPreset => ({
+    const preset = (): WledPreset => ({
       id: '3',
       name: 'Preset1',
       on: false,
-      hapService: mockService as any,
-      controller: mockAccessory.context.device as any,
       isPlaylist: false,
     });
 
@@ -206,7 +209,7 @@ describe('WledWsPlatformAccessory', () => {
     });
 
     it('should reject setPreset if controller is not connected', async () => {
-      instance['connectionEstablished'] = false;
+      device['connectionEstablished'] = false;
       await expect(instance.setPreset(preset(), true)).rejects.toThrow(Error);
       expect(mockWledClient.setPreset).not.toHaveBeenCalled();
     });
@@ -222,7 +225,7 @@ describe('WledWsPlatformAccessory', () => {
         '3': { name: 'Preset1', segments: [] },
         '4': { name: 'Other', segments: [] },
       };
-      instance.onPresetsReceived();
+      device.onPresetsReceived();
 
       expect(mockAccessory.addService).toHaveBeenCalledWith(
         mockPlatform.Service.Switch,
@@ -234,11 +237,43 @@ describe('WledWsPlatformAccessory', () => {
         'Other',
         'WLED-PRESET-4',
       );
-      expect(instance['presetList'].map((p) => p.id)).toEqual(['3']);
+      expect(device.presets.map((p) => p.id)).toEqual(['3']);
       expect(mockService.onGet).toHaveBeenCalled();
       expect(mockService.onSet).toHaveBeenCalled();
       mockWledClient.presets = {};
     });
+  });
+
+  describe('color temperature', () => {
+    beforeEach(() => {
+      instance['ledState'].LightCapability = LightCapability.RGBWCCT;
+    });
+
+    it('should keep the HomeKit value in mired after a set', async () => {
+      await instance.setColorTemperature(250);
+      expect(mockWledClient.setCCT).toHaveBeenCalledWith(177);
+      await expect(instance.getColorTemperature()).resolves.toBe(250);
+    });
+
+    it('should only update HomeKit when the controller color temperature changed', () => {
+      const state = { ...mockWledClient.state, segments: [{ colors: [[255, 0, 0]], cct: 177 }] };
+      instance.onStateReceived(state as any);
+      instance.onStateReceived(state as any);
+
+      const updates = mockService.updateCharacteristic.mock.calls.filter(
+        ([characteristic]) => characteristic === 'ColorTemperature',
+      );
+      expect(updates).toEqual([['ColorTemperature', 250]]);
+    });
+  });
+
+  it('should update the switch of a preset changed by the controller', () => {
+    const presetService = { ...mockService, updateCharacteristic: jest.fn() };
+    instance['presetServices'].set('3', presetService as any);
+
+    instance.onPresetChanged({ id: '3', name: 'Preset1', on: true, isPlaylist: false });
+
+    expect(presetService.updateCharacteristic).toHaveBeenCalledWith('On', true);
   });
 
   it('should update ledState and log info when onStateReceived is called', () => {
@@ -252,7 +287,7 @@ describe('WledWsPlatformAccessory', () => {
     instance['ledState'].LightCapability = LightCapability.RGB;
 
     // Handler aufrufen
-    instance.onStateReceived();
+    instance.onStateReceived(mockWledClient.state as any);
 
     // Erwartete Änderungen prüfen
     expect(instance['ledState'].On).toBe(true);

@@ -105,8 +105,9 @@ describe('WledWsHomebridgePlatform', () => {
   it('should call disconnect on all accessories in disconnectDevices', () => {
     const platform = new WledWsHomebridgePlatform(mockLog as any, mockConfig as any, mockApi as any);
     const mockAccessory = { disconnect: jest.fn() };
-    platform['accessoryMap'].set('uuid-addr1', mockAccessory);
-    platform['accessoryMap'].set('uuid-addr2', mockAccessory);
+    platform['deviceMap'].clear();
+    platform['deviceMap'].set('uuid-addr1', mockAccessory as any);
+    platform['deviceMap'].set('uuid-addr2', mockAccessory as any);
     platform.disconnectDevices();
     expect(mockLog.info).toHaveBeenCalledWith('Shutdown - disconnecting all accessories');
     expect(mockAccessory.disconnect).toHaveBeenCalledTimes(2);

@@ -25,8 +25,16 @@ export class FakeClient {
   init = jest.fn().mockResolvedValue(true);
   disconnect = jest.fn();
   setPreset = jest.fn();
+  turnOn = jest.fn();
   turnOff = jest.fn();
-  presets = {
+  setBrightness = jest.fn();
+  setColor = jest.fn();
+  setCCT = jest.fn();
+  allowLiveData = jest.fn();
+  ignoreLiveData = jest.fn();
+  state: Record<string, unknown> = {};
+  info: Record<string, unknown> = {};
+  presets: Record<string, unknown> = {
     '1': { name: 'Preset1', segments: [] },
     '2': { name: 'Preset2', segments: [] },
   };

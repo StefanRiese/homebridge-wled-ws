@@ -1,27 +1,26 @@
 jest.mock('wled-client', () => require('./helpers/fakeWled').wledClientModule);
 
-import { WledWsPlatformAccessory } from '../src/WledWsPlatformAccessory';
+import { WledDevice } from '../src/WledDevice';
 import {
   clients,
   createAccessory,
   flushPromises,
   mockLogger,
-  mockPlatform,
 } from './helpers/fakeWled';
 
-describe('WledWsPlatformAccessory client replacement on reconnect', () => {
-  let instance: WledWsPlatformAccessory;
+describe('WledDevice client replacement on reconnect', () => {
+  let instance: WledDevice;
 
   beforeEach(async () => {
     jest.useFakeTimers();
     jest.clearAllMocks();
     clients.length = 0;
-    instance = new WledWsPlatformAccessory(
-      mockPlatform as any,
+    instance = new WledDevice(
+      createAccessory().context.device as any,
       mockLogger as any,
-      createAccessory() as any,
       false,
     );
+    instance.connect(false);
     clients[0].emit('open');
     await flushPromises();
   });

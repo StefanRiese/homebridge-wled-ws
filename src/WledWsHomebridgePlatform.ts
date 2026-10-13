@@ -11,6 +11,7 @@ import {
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
 import { WledWsPlatformAccessory } from './WledWsPlatformAccessory';
 import { WledController } from './WledController';
+import { WledDevice } from './WledDevice';
 
 /**
  * HomebridgePlatform
@@ -28,6 +29,7 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
   // holds a list of controller
   private controllerMap = new Map();
   private accessoryMap = new Map();
+  private deviceMap = new Map<string, WledDevice>();
 
   constructor(
     public readonly log: Logger,
@@ -123,15 +125,7 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
 
           // create the accessory handler for the restored accessory
           // this is imported from `platformAccessory.ts`
-          this.accessoryMap.set(
-            uuid,
-            new WledWsPlatformAccessory(
-              this,
-              this.log,
-              existingAccessory,
-              this.config.logging,
-            ),
-          );
+          this.createAccessoryHandler(uuid, controller, existingAccessory);
 
           // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, eg.:
           // remove platform accessories when no longer present
@@ -153,15 +147,7 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
 
           // create the accessory handler for the newly create accessory
           // this is imported from `platformAccessory.ts`
-          this.accessoryMap.set(
-            uuid,
-            new WledWsPlatformAccessory(
-              this,
-              this.log,
-              accessory,
-              this.config.logging,
-            ),
-          );
+          this.createAccessoryHandler(uuid, controller, accessory);
 
           // link the accessory to your platform
           this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
@@ -193,12 +179,38 @@ export class WledWsHomebridgePlatform implements DynamicPlatformPlugin {
   }
 
   /**
+   * Creates the connection to the controller and the HomeKit handler for its accessory,
+   * then connects the controller
+   */
+  createAccessoryHandler(
+    uuid: string,
+    controller: WledController,
+    accessory: PlatformAccessory,
+  ) {
+    const device = new WledDevice(controller, this.log, this.config.logging);
+    this.deviceMap.set(uuid, device);
+    this.accessoryMap.set(
+      uuid,
+      new WledWsPlatformAccessory(
+        this,
+        this.log,
+        accessory,
+        device,
+        this.config.logging,
+      ),
+    );
+
+    // Connect the controller with Reconnect-Flag set to false
+    device.connect(false);
+  }
+
+  /**
    * On shutdown close all existing connections
    */
   disconnectDevices() {
     this.log.info('Shutdown - disconnecting all accessories');
-    for (const accessory of this.accessoryMap.values()) {
-      accessory.disconnect();
+    for (const device of this.deviceMap.values()) {
+      device.disconnect();
     }
   }
 }

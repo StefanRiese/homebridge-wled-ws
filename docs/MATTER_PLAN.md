@@ -1,6 +1,6 @@
 # Matter Support – Implementation Plan
 
-Status: **PR 1 done**, PR 2 next · Branch: `feat/matter-support` · Created: 2026-10-13
+Status: **PR 1 + PR 2 done**, PR 3 next · Branch: `feat/matter-support` · Created: 2026-10-13
 
 Goal: expose WLED controllers as Matter devices via the Homebridge 2.x Matter API (`api.matter`),
 in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
@@ -54,7 +54,7 @@ Docs: <https://developers.homebridge.io/homebridge/interfaces/MatterAPI.html>,
 WledWsHomebridgePlatform ─┬─ WledDevice (one per controller, protocol-neutral)
                           │    websocket, reconnect/heartbeat, state, presets, commands
                           │    events: connected / disconnected / state / info / presets
-                          ├─ HapWledAccessory     (current HAP code, slimmed to an adapter)
+                          ├─ WledWsPlatformAccessory (HAP adapter; class name kept to keep the upstream diff readable)
                           └─ MatterWledAccessory  (new; only if api.isMatterEnabled() && config.enableMatter)
 ```
 
@@ -117,12 +117,24 @@ Matter handler names (Homebridge 2.4 `handlers` keys):
 - [ ] Not done (separate fix): `npm run lint` only lints `eslint.config.mjs`. `eslint src` is clean,
       `test/` has 23 pre-existing `no-explicit-any` errors.
 
-### PR 2 – Extract `WledDevice`, no behavior change (~2–3 days)
-- [ ] Move connection, reconnect, heartbeat, state, presets, commands into `src/WledDevice.ts`
-      (typed EventEmitter, no `homebridge` imports except `Logger`).
-- [ ] Turn `WledWsPlatformAccessory` into `HapWledAccessory` adapter.
-- [ ] Move/adapt existing tests (`WledWsStaleClient.test.ts` etc.), add `WledDevice` unit tests.
-- [ ] Fix the color temperature unit bug (finding 3).
+### PR 2 – Extract `WledDevice`, no behavior change (~2–3 days) ✅
+- [x] `src/WledDevice.ts`: connection, reconnect, heartbeat, info/capability, preset list and
+      preset/playlist activity tracking, commands. Typed `EventEmitter` with events `connected`,
+      `disconnected`, `state`, `info` (once), `presets`, `presetChanged`. Only `Logger` from homebridge.
+- [x] `WledWsPlatformAccessory` is now the HAP adapter (class name kept on purpose). It keeps its
+      own state in HomeKit units and maps presets to services via `presetServices` by preset id.
+- [x] `WledControllerPreset` (held a HAP `Service`) replaced by protocol-neutral `WledPreset`.
+- [x] Platform creates one `WledDevice` per controller (`deviceMap`), attaches the HAP adapter,
+      then connects; shutdown disconnects the devices.
+- [x] Tests adapted; new `test/WledDevice.test.ts` (connection, presets, playlists, info, live).
+      40 tests total.
+- [x] Fixed color temperature unit bug (finding 3); test verified to fail on the old code.
+- [x] Side fixes: color temperature is only pushed/logged when it changed (was logged at info
+      level on every state update); preset `on` state survives a preset list refresh (the list
+      was appended to instead of replaced on every reconnect).
+- [x] Verified with an end-to-end replay (fake WLED + real Homebridge 1.8.5 and 2.4.0, RGB and
+      RGBWCCT strips): identical WLED traffic, identical final HomeKit state, identical plugin log
+      except the removed duplicate color temperature lines.
 
 ### PR 3 – Matter main light (~2–3 days)
 - [ ] `src/MatterWledAccessory.ts`: registration (device type from cached capability), command

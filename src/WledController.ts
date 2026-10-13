@@ -1,5 +1,3 @@
-import { Service } from 'homebridge';
-
 // see config.schema.json
 export interface WledController {
   name: string;
@@ -18,11 +16,10 @@ export enum LightCapability {
   RGBWCCT = 7
 }
 
-export interface WledControllerPreset {
+// a preset or playlist configured by the user and available on the controller
+export interface WledPreset {
   id: string;
   name: string;
   on: boolean;
-  hapService: Service;
-  controller: WledController;
   isPlaylist: boolean;
 }
