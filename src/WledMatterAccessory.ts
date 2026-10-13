@@ -657,6 +657,7 @@ export class WledMatterAccessory {
     if (!preset) {
       throw new Error(`Preset ${presetId} is not available on controller ${this.device.controller.name}`);
     }
+    this.logCommand('preset %s (%s) to: %s', preset.id, preset.name, on ? 'On' : 'Off');
     this.expect(`part:${presetPartId(presetId)}`, { onOff: on });
     this.device.setPreset(preset, on);
   }
@@ -681,6 +682,9 @@ export class WledMatterAccessory {
     }
     this.expect(key, { onOff: on });
     await this.matter.updateAccessoryState(this.uuid, 'onOff', { onOff: on }, partId);
+    if (this.loggingEnabled) {
+      this.log.info('Matter: updated part %s of controller %s to: %s', partId, this.device.controller.name, on ? 'On' : 'Off');
+    }
   }
 
   /**
@@ -741,6 +745,9 @@ export class WledMatterAccessory {
       }
       this.expect(cluster, changed);
       await this.matter.updateAccessoryState(this.uuid, cluster, changed);
+      if (this.loggingEnabled) {
+        this.log.info('Matter: updated %s of controller %s to: %s', cluster, this.device.controller.name, JSON.stringify(changed));
+      }
     }
   }
 

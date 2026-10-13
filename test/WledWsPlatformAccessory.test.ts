@@ -186,7 +186,8 @@ describe('WledWsPlatformAccessory', () => {
     await instance.liveSetOn(false);
     expect(mockWledClient.ignoreLiveData).toHaveBeenCalledWith(false);
     expect(mockLogger.info).toHaveBeenCalledWith(
-      'Resetting real time mode after stream for controller %s',
+      'Resetting real time mode after stream for controller %s: %s',
+      mockAccessory.context.device.name,
       'true'
     );
   });

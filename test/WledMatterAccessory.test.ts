@@ -405,6 +405,13 @@ describe('WledMatterAccessory', () => {
     it('activates and deactivates presets', async () => {
       await part('preset-2').handlers.onOff.on();
       expect(client().setPreset).toHaveBeenCalledWith('2');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Matter: set controller %s preset %s (%s) to: %s',
+        device.controller.name,
+        '2',
+        expect.any(String),
+        'On',
+      );
       await part('preset-2').handlers.onOff.off();
       expect(client().turnOff).toHaveBeenCalled();
     });

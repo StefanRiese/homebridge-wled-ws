@@ -115,7 +115,8 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
     } else {
       if (this.loggingEnabled){
         this.log.info(
-          'Resetting real time mode after stream for controller %s',
+          'Resetting real time mode after stream for controller %s: %s',
+          this.controller.name,
           this.controller.resetRealTimeModeAfterStream ? 'true' : 'false',
         );
       }

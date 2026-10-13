@@ -1,6 +1,6 @@
 # Matter Support – Implementation Plan
 
-Status: **PR 1–4 done, README written** — paused, PR 5 (real devices) next · Branch: `feat/matter-support` · Created: 2026-10-13
+Status: **paused on 2026-10-13 during PR 5** (real-device tests) — Matter is skipped for now, the branch is kept · Branch: `feat/matter-support` · Created: 2026-10-13
 
 Goal: expose WLED controllers as Matter devices via the Homebridge 2.x Matter API (`api.matter`),
 in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
@@ -10,18 +10,49 @@ in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
 
 ## 0. Where we stopped / how to resume (2026-10-13)
 
-Branch is pushed to the fork and up to date with `main`: the upstream fixes #468–#470 were merged
+**Paused.** After the real-device tests the Matter implementation is skipped for now; the branch
+`feat/matter-support` is kept (committed and pushed) to continue later. Reason: over Matter, Apple
+Home shows state changes of the preset parts much later than HomeKit (20–30 s vs. 1–2 s) although
+the plugin hands them to Homebridge's Matter server within the same second, and all part buttons are
+labelled with the device name. Results in the PR 5 checklist (§3).
+
+State of the Homebridge instance when pausing:
+- Plugin: **0.0.25 from npm** (reinstalled via the Homebridge UI on 2026-10-13 17:36); the test
+  build tarball is still in `/var/lib/homebridge/local-plugins/`.
+- WLED child bridge: `_bridge.matter` = `{ "port": 5541, "enabled": false }` (Matter server off,
+  pairing data in `/var/lib/homebridge/matter/0ECF014DFE63` kept). The Matter bridge is still
+  paired in Apple Home and shows "No Response" until it is removed there or Matter is re-enabled.
+- Config still contains test settings that 0.0.25 ignores: `enableMatter: true`,
+  `testController: true`, `logging: true`, Wled_Cube `presets: "Colortwinkles,Solid"` and
+  `showRealTimeModeButton: true`. Backups: `config.json.bak-20261013-*` on the host.
+
+To resume: decide on presets as parts vs. separate Matter devices (and whether the delay also
+affects the light itself, see the open test in §3), deploy the branch with
+`npm version 0.1.0-matter.5 --no-git-tag-version && HB_HOST=homebridge scripts/deploy-local.sh`,
+set `"enabled": true` in `_bridge.matter` and run `hb-service restart`.
+
+History: branch is pushed to the fork and up to date with `main`: the upstream fixes #468–#470 were merged
 and ported into `WledDevice` / the HomeKit accessory (124 tests, end-to-end checks unchanged).
 
-Done and committed on `feat/matter-support` (not pushed): plan, PR 1–4, README Matter section.
+Done and committed on `feat/matter-support`: plan, PR 1–4, README Matter section, test controller.
 Everything is verified with unit tests (114) and against a real Homebridge 2.4 Matter server with a
 fake WLED controller — but **not yet with a real WLED controller or a real Matter controller app**.
 
 Next steps, in order:
-1. Deploy to the Homebridge LXC container (§5): fill in host/user, check IPv6 in the container,
-   `npm version 0.1.0-matter.1 --no-git-tag-version && HB_HOST=<host> scripts/deploy-local.sh`.
-2. Enable Matter for the bridge (`bridge.matter`) and `enableMatter` in the plugin config.
+1. ✅ 2026-10-13: `0.1.0-matter.1` deployed to the Homebridge LXC container (§5) with
+   `HB_HOST=homebridge scripts/deploy-local.sh`, `enableMatter` still off. The WLED child bridge
+   started cleanly; the startup log matches 0.0.25 (3 controllers connected, Wled_Rainbow lc=3,
+   Wled_Cube and Wled_Keno_Uhr lc=1; WLED 16.0.1 and 0.14.0-b1). Checked in the Home app: on/off,
+   brightness and color work as expected on all three controllers.
+2. ✅ 2026-10-13: Matter enabled on the WLED child bridge (`_bridge.matter.port` 5541) and
+   `enableMatter: true`, then `hb-service restart`. All three lights registered as Extended Color
+   Lights (HueSaturation + Xy), node online. After a restart of the child bridge the cached Matter
+   devices were reused with the same UUIDs, no re-registration.
 3. Pair with Apple Home and/or Google Home and work through the PR 5 checklist below.
+   Apple Home paired on 2026-10-13: on/off, brightness, color OK. Next: `logging` on to see the
+   color commands, a preset on one controller to test parts, HomeKit ↔ Matter in parallel.
+   2026-10-13: Wled_Cube set up as test controller (`presets: "Colortwinkles"`,
+   `showRealTimeModeButton: true`, platform `logging: true`; backup `config.json.bak-20261013-152946`).
 4. Fix what comes up, then CHANGELOG + release decision (§6).
 
 Test harness used so far (lives in the session scratchpad, **not in the repo** — rebuild if needed):
@@ -211,8 +242,48 @@ Findings from the real Matter stack (not visible with mocks):
 - [x] README: sample `config.json` for HomeKit only, Matter only (`bridge.hap.enabled: false`) and
       HomeKit + Matter — each verified on Homebridge 2.4 (bridge published / Matter server / plugin
       Matter accessory as expected, no errors).
-- [ ] Deploy to the local Homebridge (§5); confirm HomeKit still works with the real controllers.
+- [x] Deploy to the local Homebridge (§5); confirm HomeKit still works with the real controllers.
+      (2026-10-13, `0.1.0-matter.1`, 3 controllers: on/off, brightness, color OK)
 - [ ] Pair with Apple Home + Google Home (Alexa if available). Check per app:
+  - Apple Home (2026-10-13): paired via Matter (2 fabrics added, as usual for Apple); on/off,
+    brightness and color work on all three lights (2× RGB lc=1, 1× RGBW lc=3). Color command type
+    not checked yet (`logging` off). No presets/live configured, so no parts tested yet.
+  - Apple Home, Wled_Cube with preset + live parts (2026-10-13): the structure change re-registered
+    the light before the node went online; the next restarts restored it from the cache (2 parts,
+    no re-registration). Over Matter: on/off, level, live part on/off and preset on/off work.
+    **Apple Home sends hue/saturation** (`moveToHueAndSaturation`), not xy. Note: Apple Home shows
+    the HomeKit and the Matter accessory side by side with the same name — check the tile's settings
+    (Matter section) to know which one is tested.
+  - `0.1.0-matter.2`: preset commands from Matter are logged (`Matter: set controller … preset`),
+    the real-time reset log line shows the controller name.
+  - **Problems with parts in Apple Home** (2026-10-13, Wled_Cube after adding preset "Solid", i.e.
+    a second structure change of the paired light):
+    - All part buttons are labelled with the device name ("WledCube"), not "Colortwinkles" /
+      "Solid" / "Ambilight". Homebridge only gives parts a Descriptor TagList label; Apple Home
+      ignores it. homebridge-shelly-matter documents the same: grouped channels always show the
+      device name.
+    - Part states set by the plugin are not shown: switching Solid on turns Colortwinkles off in
+      WLED and in Homebridge's Matter state (verified in the matter.js storage on the host), but
+      Apple Home keeps both buttons on, also after closing and reopening the tile.
+    - Possible cause: homebridge-shelly-matter notes that "Apple Home mishandles devices that
+      reappear with the same identity but a different structure" (our stable UUID approach).
+    - Commands from the part buttons work.
+    - Update: the part states do arrive in Apple Home, but late (about 20–30 s, sometimes much
+      faster). `0.1.0-matter.3` logs when a state is handed to Matter
+      (`Matter: updated part …` / `Matter: updated <cluster> …`) to measure where the delay is.
+  - Test controller (`testController: true`, 2026-10-13): simulated WLED controller "WLED Test"
+    inside the plugin (`src/WledSimulator.ts`, HTTP + WebSocket on `127.0.0.1:18099`), RGB light
+    with the presets "Test Red" / "Test Blue". For testing HomeKit / Matter without hardware;
+    logs every command it receives.
+  - Timing with the test controller (2026-10-13): the plugin hands every change to HomeKit and
+    Matter within the same second (command → simulator → echo → `Matter: updated …`), including
+    switching the previous preset off. In Apple Home the other preset turns off within 1–2 s on
+    the HomeKit tile, but noticeably later on the Matter tile (Wled_Cube: 20–30 s, sometimes
+    faster). → The delay is between Homebridge's Matter server and Apple Home, not in the plugin.
+    Still open: are changes of the light itself (on/off, brightness) also slow over Matter, or only
+    the parts?
+  - Side effect seen: switching off a preset that is not active turns the light off (also on
+    HomeKit, same as before). Possible change: only the active preset turns the light off.
   - [ ] light + preset/playlist/live parts: how are they presented?
   - [ ] on/off, brightness, color, color temperature work; which color commands are sent
         (enable `logging`, look for `Matter: set controller ...` lines: hue/saturation vs. xy)
@@ -257,21 +328,20 @@ Findings from the real Matter stack (not visible with mocks):
 
 Homebridge runs in an LXC container on the local network.
 
-### Container details (fill in)
+### Container details (checked 2026-10-13)
 
 | Item              | Value                         |
 |-------------------|-------------------------------|
-| Host / IP         | `<HOMEBRIDGE_HOST>`           |
-| SSH user          | `<SSH_USER>`                  |
-| Install type      | hb-service (`/var/lib/homebridge`)? |
-| Node version      | `<node -v>` (Matter needs ≥ 22.12) |
-| Homebridge version| `<homebridge -V>` (Matter needs ≥ 2.x) |
+| Host              | Proxmox LXC container 106; SSH alias `homebridge` in `~/.ssh/config` of the dev machine (IP, user and key in the private `StefanRiese/MyHomebridge` notes) |
+| SSH user          | `root` (key login)            |
+| Install type      | hb-service: service `homebridge`, user `homebridge`, data in `/var/lib/homebridge` |
+| Node version      | v24.21.0 in `/opt/homebridge/bin` (not on root's `PATH`) |
+| Homebridge version| 2.4.0 (`/var/lib/homebridge/node_modules/homebridge`), UI 5.29.0 |
+| Plugin            | `homebridge-wled-ws` 0.0.25 on the child bridge "Homebridge WLED", 3 controllers |
+| IPv6              | ✅ `fe80::` link-local and an `fd90:…` ULA address on `eth0` |
+| Matter            | not enabled yet on any bridge |
 
-Check on the container:
-```bash
-ls -d /var/lib/homebridge && systemctl status homebridge --no-pager | head -3
-node -v && homebridge -V
-```
+Every plugin runs on its own child bridge, so a test deploy restarts only the WLED child bridge.
 
 ### Prerequisites for Matter in LXC
 
@@ -283,48 +353,33 @@ node -v && homebridge -V
   If missing: Proxmox → container → Network → set IPv6 to **SLAAC**, restart container.
 - **Bridged networking** (vmbr), no NAT, so mDNS multicast reaches the LAN.
 - Matter enabled on the Homebridge bridge (or a child bridge) in the Homebridge UI.
-- SSH key login from the dev machine: `ssh <SSH_USER>@<HOMEBRIDGE_HOST> true`.
+- SSH key login from the dev machine: `ssh homebridge true`.
 
-### Build & install manually
+### Helper: `scripts/deploy-local.sh`
 
 ```bash
-# on the dev machine
-npm version 0.1.0-matter.1 --no-git-tag-version   # pre-release version, see note below
-npm run build
-npm pack                                           # -> homebridge-wled-ws-0.1.0-matter.1.tgz
-scp homebridge-wled-ws-0.1.0-matter.1.tgz <SSH_USER>@<HOMEBRIDGE_HOST>:/tmp/
-
-# on the container (hb-service layout)
-sudo -u homebridge npm install --prefix /var/lib/homebridge /tmp/homebridge-wled-ws-0.1.0-matter.1.tgz
-sudo hb-service restart
+npm version 0.1.0-matter.1 --no-git-tag-version   # pre-release version, see notes below
+HB_HOST=homebridge scripts/deploy-local.sh
 ```
+Builds (via `npm pack` → `prepare`), copies the tarball to `/var/lib/homebridge/local-plugins/`
+(kept there: npm records the path in `/var/lib/homebridge/package.json`, and later plugin installs
+from the UI fail if it is missing; older tarballs of the plugin are removed), installs it as the
+`homebridge` user with `/opt/homebridge/bin` on the `PATH`, then restarts only the plugin's child
+bridge (SIGTERM → clean shutdown, Homebridge starts it again).
+- `HB_RESTART=all` runs `hb-service restart` instead (plugin on the main bridge), `none` skips it.
+- The child bridge restart keeps the config the bridge was started with. After editing
+  `config.json`, restart the bridge from the Homebridge UI (it rereads the config) or run
+  `hb-service restart`; changes to `_bridge` (e.g. `matter`) always need `hb-service restart`.
+- `HB_USER` overrides the ssh user, `HB_PREFIX` overrides `/var/lib/homebridge`.
 
 Notes:
 - **Always use a pre-release version** (`0.1.0-matter.N`). With version 0.0.25 the Homebridge UI
   may offer an "update" to smhex's npm release, which silently overwrites the test build.
 - Package and platform name (`wled-ws`) stay unchanged → existing config, HomeKit accessories,
   rooms and automations are kept.
-- **Rollback:**
-  `sudo -u homebridge npm install --prefix /var/lib/homebridge homebridge-wled-ws@0.0.25 && sudo hb-service restart`
-- Logs: `sudo hb-service logs` or the Homebridge UI log view.
-
-### Alternative: install directly from the git branch
-
-Requires the `prepare` script from PR 1 (`dist/` is not committed):
-```bash
-sudo -u homebridge npm install --prefix /var/lib/homebridge StefanRiese/homebridge-wled-ws#feat/matter-support
-sudo hb-service restart
-```
-
-### Helper: `scripts/deploy-local.sh`
-
-```bash
-npm version 0.1.0-matter.1 --no-git-tag-version
-HB_HOST=<HOMEBRIDGE_HOST> HB_USER=root scripts/deploy-local.sh   # HB_USER defaults to root
-```
-Builds (via `npm pack` → `prepare`), copies the tarball, installs it as the `homebridge` user
-(`runuser` when logged in as root, `sudo` otherwise), using `/opt/homebridge/bin/npm` if present,
-then runs `hb-service restart`. `HB_PREFIX` overrides `/var/lib/homebridge`.
+- **Rollback** (on the host, then restart the WLED child bridge in the UI):
+  `cd /var/lib/homebridge && runuser -u homebridge -- env PATH=/opt/homebridge/bin:$PATH npm install homebridge-wled-ws@0.0.25`
+- Logs: Homebridge UI log view or `/var/lib/homebridge/homebridge.log`.
 
 ---
 
