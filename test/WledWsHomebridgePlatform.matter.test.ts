@@ -46,7 +46,7 @@ function createApi(withMatter: boolean) {
 }
 
 const cachedMatterAccessory = (address: string) => ({
-  UUID: `uuid-matter:${address}:1`,
+  UUID: `uuid-matter:${address}`,
   displayName: address,
   context: { address, lightCapability: 1 },
 });
@@ -107,12 +107,11 @@ describe('WledWsHomebridgePlatform Matter support', () => {
     expect([...platform['matterAccessoryMap'].keys()]).toEqual(['192.168.1.1', '192.168.1.2']);
   });
 
-  it('registers cached Matter accessories right away', async () => {
+  it('passes the cached Matter accessory to the accessory of its controller', () => {
     const { api, matter } = createApi(true);
     start(api, true, [cachedMatterAccessory('192.168.1.1')]);
-    await platform['matterAccessoryMap'].get('192.168.1.1')!.settled();
 
-    expect(matter.registerPlatformAccessories).toHaveBeenCalledTimes(1);
+    expect(platform['matterAccessoryMap'].get('192.168.1.1')!.uuid).toBe('uuid-matter:192.168.1.1');
     expect(matter.unregisterPlatformAccessories).not.toHaveBeenCalled();
   });
 
@@ -129,6 +128,7 @@ describe('WledWsHomebridgePlatform Matter support', () => {
   it('removes duplicate cached Matter accessories of a controller', () => {
     const { api, matter } = createApi(true);
     const first = cachedMatterAccessory('192.168.1.1');
+    // e.g. left over from an older plugin version with another UUID scheme
     const duplicate = { ...cachedMatterAccessory('192.168.1.1'), UUID: 'uuid-matter:192.168.1.1:7' };
     start(api, true, [first, duplicate]);
 

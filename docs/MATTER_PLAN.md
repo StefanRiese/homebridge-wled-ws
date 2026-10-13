@@ -1,6 +1,6 @@
 # Matter Support – Implementation Plan
 
-Status: **PR 1–3 done**, PR 4 next · Branch: `feat/matter-support` · Created: 2026-10-13
+Status: **PR 1–4 done**, PR 5 (real devices, docs, release) next · Branch: `feat/matter-support` · Created: 2026-10-13
 
 Goal: expose WLED controllers as Matter devices via the Homebridge 2.x Matter API (`api.matter`),
 in addition to the existing HomeKit (HAP) accessories. Work happens in the fork
@@ -66,14 +66,17 @@ WledWsHomebridgePlatform ─┬─ WledDevice (one per controller, protocol-neut
 | White (2)                       | `DimmableLight`                    | + LevelControl                                             |
 | WCCT (6)                        | `ColorTemperatureLight`            | + ColorControl (`colorTemperatureMireds`)                  |
 | RGB (1) / RGBW (3) / RGBWCCT (7) | `ExtendedColorLight`              | + ColorControl hue/sat, `colorMode`, XY, CT (for 7)        |
-| Preset / playlist (each)        | `OnOffOutlet`, separate accessory  | OnOff                                                      |
-| Live / realtime mode            | `OnOffOutlet`, separate accessory  | OnOff                                                      |
+| Preset / playlist (each)        | `OnOffOutlet` part of the light    | OnOff                                                      |
+| Live / realtime mode            | `OnOffOutlet` part of the light    | OnOff                                                      |
 
 Design decisions:
 
-- **Presets as separate accessories, not `parts`.** UUID = `uuid.generate(address + '-preset-' + id)`
-  (live: `address + '-live'`). Preset list changes then only add/remove those accessories and
-  never disturb the main light (pairing, room assignment).
+- **Presets as `parts` of one accessory per controller** (decided 2026-10-13, like the HomeKit
+  grouping). Part ids `preset-<id>` and `live`. Matter can't change the structure of a registered
+  endpoint, so a changed preset list re-registers the accessory.
+- **One stable UUID per controller** (`uuid.generate('matter:' + address)`). On a structure change
+  matter.js reuses the endpoint numbers of the light and of unchanged parts (verified), which gives
+  controllers the best chance to keep room/automations — to be confirmed with real controllers.
 - **`OnOffOutlet`, not `OnOffSwitch`.** A Matter `OnOffSwitch` is a *controller* device and is not
   shown as a toggle in Apple Home.
 - **Reachability:** on disconnect set `BridgedDeviceBasicInformation.reachable = false`
@@ -163,10 +166,20 @@ Findings from the real Matter stack (not visible with mocks):
 - Color commands on a light that is off are not executed by matter.js (Matter spec, ExecuteIfOff).
 - `levelControl.move` (continuous dimming) has no WLED equivalent: accepted as no-op.
 
-### PR 4 – Matter presets, playlists, live mode (~1–2 days)
-- [ ] One `OnOffOutlet` accessory per configured preset/playlist; add/remove on preset changes.
-- [ ] Live mode outlet when `showRealTimeModeButton` is set.
-- [ ] Mirror HAP semantics: exclusive active preset, playlist switches reset to off immediately.
+### PR 4 – Matter presets, playlists, live mode (~1–2 days) ✅
+- [x] Presets/playlists and the live mode switch (`showRealTimeModeButton`) as `OnOffOutlet` parts
+      of the light; names like the HomeKit switches (preset name, "Ambilight").
+- [x] HAP semantics via `WledDevice`: exclusive active preset, playlists reset to off, preset off
+      turns the light off. Kept the HAP behavior that the active preset stays on when the light
+      is turned off.
+- [x] Structure (capability, presets, live) stored in the cache context. A cached accessory is
+      registered once the controller reported its structure (fallback after 15 s if offline);
+      the first registration waits up to 5 s for the presets.
+- [x] Structure change: unregister → wait until gone + 0.5 s → register, repeated while Homebridge
+      drops it because the UUID is not free yet. Unregister needs `deviceType` (Homebridge reads it).
+- [x] Verified on a real Homebridge 2.4 Matter server: composed endpoint (light #2, parts #3–#5),
+      restart reattaches, removing/re-adding a preset keeps all endpoint numbers, strip type change
+      rebuilds the color features, part commands reach WLED. 114 unit tests.
 
 ### PR 5 – Real-device testing, docs, release (~2–3 days)
 - [ ] Test on local Homebridge (§5) with Apple Home + Google Home (Alexa if available).
@@ -184,7 +197,9 @@ Findings from the real Matter stack (not visible with mocks):
 
 - Which ColorControl commands do Apple Home / Google Home send (hue/sat vs. XY)? → verify in PR 5.
 - HAP and Matter in parallel: both adapters share one `WledDevice`; verify a HomeKit change shows
-  up on the Matter side in the same run → PR 5. README: pairing both to Apple Home gives
+  up on the Matter side in the same run → PR 5.
+- Do Apple Home / Google Home keep room and automations of the light after a structure change
+  (same UUID and endpoint numbers)? How do they present the composed parts? → PR 5. README: pairing both to Apple Home gives
   duplicates; Matter-only via `bridge.hap.enabled: false` (e.g. on a child bridge).
 - ~~`ExtendedColorLight` default features – override needed?~~ **Resolved (PR 1):** Homebridge 2.4
   derives ColorControl features from the handlers we provide
