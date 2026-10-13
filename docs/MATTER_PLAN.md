@@ -204,6 +204,9 @@ Findings from the real Matter stack (not visible with mocks):
 - [x] README: Matter section (requirements incl. IPv6/LXC, exposed device types, presets as
       parts, HomeKit + Matter together, structure changes, limitations); `enableMatter` in the
       settings table and config example.
+- [x] README: sample `config.json` for HomeKit only, Matter only (`bridge.hap.enabled: false`) and
+      HomeKit + Matter — each verified on Homebridge 2.4 (bridge published / Matter server / plugin
+      Matter accessory as expected, no errors).
 - [ ] Deploy to the local Homebridge (§5); confirm HomeKit still works with the real controllers.
 - [ ] Pair with Apple Home + Google Home (Alexa if available). Check per app:
   - [ ] light + preset/playlist/live parts: how are they presented?

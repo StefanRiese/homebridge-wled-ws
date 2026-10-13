@@ -124,8 +124,106 @@ If the controller is not reachable, the Matter light is reported as unreachable 
 
 HomeKit and Matter can be used at the same time - both control the same WLED connection and stay in sync. However, if you add the Homebridge HomeKit bridge **and** the Homebridge Matter bridge to the Apple Home app, every light shows up twice. Typical setups:
 
+- HomeKit only: the default, nothing changes compared to earlier versions.
 - HomeKit for Apple Home, Matter for Google Home / Alexa.
 - Matter only: disable HomeKit for the bridge (`"hap": { "enabled": false }` in the `bridge` section). To keep other plugins on HomeKit, run this plugin as a child bridge and disable HomeKit only there.
+
+### Sample configurations
+
+The samples show the complete Homebridge `config.json` for the main bridge. Replace the `bridge` values with your own (`username`, `pin` and `port` are created by Homebridge on the first start). The Matter `port` can be any free UDP port.
+
+**HomeKit only** - no `matter` block in `bridge`, `enableMatter` disabled (or omitted):
+
+```
+{
+    "bridge": {
+        "name": "Homebridge",
+        "username": "0E:11:22:33:44:55",
+        "port": 51826,
+        "pin": "031-45-154"
+    },
+    "platforms": [
+        {
+            "platform": "wled-ws",
+            "name": "wled-ws platform",
+            "controllers": [
+                {
+                    "name": "Living Room",
+                    "address": "192.168.1.100",
+                    "presets": "DoorClosed,DoorOpen"
+                }
+            ],
+            "enableMatter": false
+        }
+    ]
+}
+```
+
+**Matter only** - HomeKit disabled for the bridge, Matter enabled for the bridge and the plugin:
+
+```
+{
+    "bridge": {
+        "name": "Homebridge",
+        "username": "0E:11:22:33:44:55",
+        "port": 51826,
+        "pin": "031-45-154",
+        "hap": {
+            "enabled": false
+        },
+        "matter": {
+            "port": 5540
+        }
+    },
+    "platforms": [
+        {
+            "platform": "wled-ws",
+            "name": "wled-ws platform",
+            "controllers": [
+                {
+                    "name": "Living Room",
+                    "address": "192.168.1.100",
+                    "presets": "DoorClosed,DoorOpen"
+                }
+            ],
+            "enableMatter": true
+        }
+    ]
+}
+```
+
+**HomeKit and Matter** - both protocols enabled for the bridge, Matter enabled for the plugin:
+
+```
+{
+    "bridge": {
+        "name": "Homebridge",
+        "username": "0E:11:22:33:44:55",
+        "port": 51826,
+        "pin": "031-45-154",
+        "matter": {
+            "port": 5540
+        }
+    },
+    "platforms": [
+        {
+            "platform": "wled-ws",
+            "name": "wled-ws platform",
+            "controllers": [
+                {
+                    "name": "Living Room",
+                    "address": "192.168.1.100",
+                    "presets": "DoorClosed,DoorOpen"
+                }
+            ],
+            "enableMatter": true
+        }
+    ]
+}
+```
+
+> [!TIP]
+> Disabling HomeKit for the main bridge affects all plugins on it. To use Matter only for this plugin while other plugins stay on HomeKit, run it as a child bridge and disable HomeKit only for that child bridge.
 
 ### Changes of presets or LED configuration
 
