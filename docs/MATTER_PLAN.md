@@ -16,20 +16,26 @@ Home shows state changes of the preset parts much later than HomeKit (20–30 s 
 the plugin hands them to Homebridge's Matter server within the same second, and all part buttons are
 labelled with the device name. Results in the PR 5 checklist (§3).
 
-State of the Homebridge instance when pausing:
-- Plugin: **0.0.25 from npm** (reinstalled via the Homebridge UI on 2026-10-13 17:36); the test
-  build tarball is still in `/var/lib/homebridge/local-plugins/`.
-- WLED child bridge: `_bridge.matter` = `{ "port": 5541, "enabled": false }` (Matter server off,
-  pairing data in `/var/lib/homebridge/matter/0ECF014DFE63` kept). The Matter bridge is still
-  paired in Apple Home and shows "No Response" until it is removed there or Matter is re-enabled.
-- Config still contains test settings that 0.0.25 ignores: `enableMatter: true`,
-  `testController: true`, `logging: true`, Wled_Cube `presets: "Colortwinkles,Solid"` and
-  `showRealTimeModeButton: true`. Backups: `config.json.bak-20261013-*` on the host.
+State of the Homebridge instance when pausing (cleaned up on 2026-10-13 17:53):
+- Plugin: **0.0.25 from npm** (reinstalled via the Homebridge UI); the test build tarball is still
+  in `/var/lib/homebridge/local-plugins/`.
+- `config.json` is identical to the version before the Matter tests (no `_bridge.matter`, no
+  `enableMatter` / `testController`, Wled_Cube without presets). Matter pairing data is still in
+  `/var/lib/homebridge/matter/0ECF014DFE63`; the Matter bridge may still be listed in Apple Home
+  ("No Response") until it is removed there.
+- The stale HomeKit switches of Wled_Cube (Live Mode, Colortwinkles, Solid) were removed from
+  `accessories/cachedAccessories.0ECF014DFE63` with Homebridge stopped (backup
+  `…bak-before-switch-cleanup-20261013-175354`).
+- **Bugs found in 0.0.25 / main** (not Matter related, fix separately): the real-time mode switch
+  is never removed when `showRealTimeModeButton` is turned off, and preset switches are only
+  cleaned up while at least one preset is still configured (removing the last preset leaves the
+  switches).
 
 To resume: decide on presets as parts vs. separate Matter devices (and whether the delay also
 affects the light itself, see the open test in §3), deploy the branch with
 `npm version 0.1.0-matter.5 --no-git-tag-version && HB_HOST=homebridge scripts/deploy-local.sh`,
-set `"enabled": true` in `_bridge.matter` and run `hb-service restart`.
+add `"matter": { "port": 5541 }` to the WLED `_bridge` and `enableMatter: true`, run
+`hb-service restart`.
 
 History: branch is pushed to the fork and up to date with `main`: the upstream fixes #468–#470 were merged
 and ported into `WledDevice` / the HomeKit accessory (124 tests, end-to-end checks unchanged).
