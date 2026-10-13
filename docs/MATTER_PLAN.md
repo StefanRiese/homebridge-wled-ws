@@ -136,8 +136,9 @@ Matter handler names (Homebridge 2.4 `handlers` keys):
 - [x] Add `scripts/deploy-local.sh` (see §5).
 - [x] Default ColorControl features of `ExtendedColorLight`: **no override needed** (see §4).
 - [x] `.npmignore`: exclude `test/`, `docs/`, `scripts/` and dev configs from the npm package.
-- [ ] Not done (separate fix): `npm run lint` only lints `eslint.config.mjs`. `eslint src` is clean,
-      `test/` has 23 pre-existing `no-explicit-any` errors.
+- [x] Lint script fixed: `npm run lint` linted only `eslint.config.mjs`. Now `eslint . --max-warnings=0`
+      over `src/` and `test/` (same style rules for both); `no-explicit-any` and `no-require-imports`
+      are allowed in tests (test double casts, hoisted `jest.mock()` factories).
 
 ### PR 2 – Extract `WledDevice`, no behavior change (~2–3 days) ✅
 - [x] `src/WledDevice.ts`: connection, reconnect, heartbeat, info/capability, preset list and
@@ -242,7 +243,10 @@ Findings from the real Matter stack (not visible with mocks):
   `moveToColorLogic` → Xy, `moveToColorTemperatureLogic` → ColorTemperature. On cache restore it
   falls back to the cluster attributes. So: only pass the handlers the strip supports.
 - Homebridge 2.x itself requires Node `^22 || ^24 || ^26`; Node 20 users are HB 1.x / HAP-only.
-- Keep Node 20 in CI? Proposal: yes (HAP-only there; Matter requires Node ≥ 22.12).
+- ~~Keep Node 20?~~ **Decided: yes.** Node 20 = Homebridge 1.x, HomeKit only (`enableMatter` is
+  ignored). Verified with Node 20.20.2: `npm ci` (only EBADENGINE warnings from the Homebridge 2.4
+  dev dependency), lint, build and all tests pass; HomeKit scenario on Homebridge 1.8.5 identical to
+  the baseline, also with `enableMatter: true`. CI keeps the Node 20 build.
 
 ---
 

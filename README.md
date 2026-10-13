@@ -80,6 +80,8 @@ Besides HomeKit, the plugin can expose every WLED controller as a Matter device.
 ### Requirements
 
 - Homebridge 2 (tested with 2.4) with Matter enabled for the bridge the plugin runs on (main bridge or child bridge). Homebridge 2 requires Node.js 22 or newer.
+
+  On Node.js 20 with Homebridge 1.x the plugin keeps working with HomeKit as before - `enableMatter` is ignored there.
 - `enableMatter` enabled in the plugin settings.
 - IPv6 and mDNS (multicast) in your network, Matter depends on both. If Homebridge runs in a container (e.g. an LXC container on Proxmox or Docker), make sure the container has an IPv6 address (`ip -6 addr` shows an `fe80::` address) and uses a bridged network, not NAT.
 
