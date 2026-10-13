@@ -232,8 +232,10 @@ Findings from the real Matter stack (not visible with mocks):
 - HAP and Matter in parallel: both adapters share one `WledDevice`; verify a HomeKit change shows
   up on the Matter side in the same run → PR 5.
 - Do Apple Home / Google Home keep room and automations of the light after a structure change
-  (same UUID and endpoint numbers)? How do they present the composed parts? → PR 5. README: pairing both to Apple Home gives
-  duplicates; Matter-only via `bridge.hap.enabled: false` (e.g. on a child bridge).
+  (same UUID and endpoint numbers)? How do they present the composed parts? → PR 5.
+- ~~README: HomeKit + Matter together~~ **Done:** pairing both to Apple Home gives duplicates;
+  Matter only via `bridge.hap.enabled: false` (e.g. on a child bridge) — see README sample
+  configurations.
 - ~~`ExtendedColorLight` default features – override needed?~~ **Resolved (PR 1):** Homebridge 2.4
   derives ColorControl features from the handlers we provide
   (`determineColorControlFeaturesFromHandlers`): `moveToHueAndSaturationLogic` → HueSaturation,
