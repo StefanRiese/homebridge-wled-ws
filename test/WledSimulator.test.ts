@@ -26,7 +26,10 @@ describe('WledSimulator', () => {
     const client = new WLEDClient({
       host: simulator.address,
       websocket: { reconnect: false },
-      immediate: false,
+      // like WledDevice: WLEDClient.init() only returns the ready promise when the constructor
+      // already started it. Otherwise it resolves before the HTTP context has arrived, and that
+      // context can overwrite state the test changed in the meantime
+      immediate: true,
       init: { presets: true, config: true },
     });
     clients.push(client);
