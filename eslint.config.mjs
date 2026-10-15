@@ -31,4 +31,11 @@ export default defineConfig([
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  {
+    files: ["**/*.cjs"],
+    rules: {
+      // CommonJS scripts (e.g. scripts/watch.cjs) load their modules with require()
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 ]);

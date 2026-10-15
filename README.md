@@ -29,7 +29,7 @@ On Homebridge 2 the controllers can additionally be exposed via [Matter](#matter
 
 ## Connection recovery
 
-The plugin manages WebSocket reconnection itself. After 30 seconds without incoming WLED updates, it sends a WebSocket heartbeat. If sending that heartbeat fails, the plugin reconnects automatically. No additional configuration is required.
+The plugin manages WebSocket reconnection itself. After 30 seconds without incoming WLED updates or heartbeat responses, it sends a WebSocket heartbeat. If sending that heartbeat fails or no response arrives within 10 seconds, the plugin reconnects automatically. It also retries connections when HTTP succeeds but the WebSocket connection fails. No additional configuration is required.
 
 ## Configuration
 
@@ -285,8 +285,11 @@ Before starting the implementation of this plugin I intended to use WLED's MQTT 
 | 0.14.4  | ✅ |  |
 | 0.15.0  | ✅ |  |
 | 0.15.4  | ✅ |  |
+| 0.16.0  | ✅ |  |
+| 0.16.1  | ✅ |  |
 
 ## Thanks to the contributors
 
 - @LeLunZ for adding live mode support
 - @smitty078 for adding CCT support and improving WebSocket connection recovery
+- [@StefanRiese](https://github.com/StefanRiese) for fixing WebSocket reconnection, heartbeat timeouts, stale client events, and preset switches, and adding regression tests
