@@ -60,6 +60,10 @@ export const mockPlatform = {
   Characteristic: {
     Name: 'Name',
     On: 'On',
+    Brightness: 'Brightness',
+    Hue: 'Hue',
+    Saturation: 'Saturation',
+    ColorTemperature: 'ColorTemperature',
     Manufacturer: 'Manufacturer',
     Model: 'Model',
     FirmwareRevision: 'FirmwareRevision',

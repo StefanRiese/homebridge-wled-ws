@@ -535,6 +535,10 @@ export class WledDevice extends EventEmitter<WledDeviceEvents> {
     if (!this.init) {
       this.emit('info', this.readDeviceInfo());
       this.init = true;
+
+      // WLEDClient emits the initial state before the info. Brightness and colors of that state
+      // were skipped as the light capabilities were unknown - pass it to the adapters again
+      this.emit('state', this.wledClient.state);
     }
   }
 
